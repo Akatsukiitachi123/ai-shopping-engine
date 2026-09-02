@@ -1,100 +1,64 @@
-import { NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
-import { createClient } from "@supabase/supabase-js";
+import { NextRequest, NextResponse } from "next/server";
 
-// Ensure Supabase client is initialized with proper fallbacks
-const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://udzdhzkbvtedyntmrpxk.supabase.co";
-const supabaseAnonKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  "sb_publishable_fy-dldocPXNcQGWHT45Uqw_iPOAbxh-";
+export const dynamic = "force-dynamic";
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
     const { prompt } = await req.json();
 
-    if (!prompt || typeof prompt !== "string") {
-      return NextResponse.json({ error: "Prompt is required", results: [] }, { status: 400 });
+    if (!prompt || !prompt.trim()) {
+      return NextResponse.json({ results: [] });
     }
 
-    // 1. Fetch complete product details from Supabase
-    const { data: allProducts, error: dbError } = await supabase
-      .from("products")
-      .select("*");
+    const apiKey = process.env.RAPIDAPI_KEY;
 
-    if (dbError || !allProducts || allProducts.length === 0) {
-      console.error("DB Error:", dbError);
-      return NextResponse.json({ error: "No products available", results: [] }, { status: 500 });
-    }
-
-    const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.error("GEMINI_API_KEY is missing in environment variables.");
-      // Fallback keyword search if API key is not present
-      const queryLower = prompt.toLowerCase();
-      const fallback = allProducts.filter(
-        (p) =>
-          p.title?.toLowerCase().includes(queryLower) ||
-          p.category?.toLowerCase().includes(queryLower) ||
-          p.tag?.toLowerCase().includes(queryLower)
+      return NextResponse.json(
+        { error: "RAPIDAPI_KEY is missing in environment variables" },
+        { status: 500 }
       );
-      return NextResponse.json({ results: fallback });
     }
 
-    // 2. Initialize Gemini with active key
-    const ai = new GoogleGenAI({ apiKey });
+    // Live Amazon India search query via RapidAPI
+    const searchUrl = `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(
+      prompt
+    )}&page=1&country=IN`;
 
-    const catalogContext = allProducts.map((p) => ({
-      id: String(p.id),
-      title: p.title,
-      category: p.category,
-      price: p.price,
-      merchant: p.merchant,
-      tag: p.tag,
-    }));
-
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: `You are an AI product matching system.
-Query: "${prompt}"
-
-Available inventory:
-${JSON.stringify(catalogContext)}
-
-Select only items that match the user request by style, category, or price.
-Return strictly a JSON array containing only the string IDs of the matched items. Example: ["id1", "id2"]. If nothing matches, return [].`,
+    const response = await fetch(searchUrl, {
+      method: "GET",
+      headers: {
+        "x-rapidapi-key": apiKey,
+        "x-rapidapi-host": "real-time-amazon-data.p.rapidapi.com",
+      },
     });
 
-    const responseText = response.text ? response.text.trim() : "[]";
-    const cleanedJson = responseText.replace(/```json|```/g, "").trim();
+    const json = await response.json();
+    const items = json?.data?.products || [];
 
-    let matchedIds: string[] = [];
-    try {
-      matchedIds = JSON.parse(cleanedJson);
-    } catch {
-      matchedIds = [];
-    }
+    const formattedResults = items.slice(0, 16).map((item: any, index: number) => {
+      const cleanPrice = item.product_price
+        ? item.product_price.replace(/[^0-9.]/g, "")
+        : "Check on Amazon";
+      const cleanOriginalPrice = item.product_original_price
+        ? item.product_original_price.replace(/[^0-9.]/g, "")
+        : null;
 
-    // Map matched IDs back to the full product records (including images and URLs)
-    let filteredProducts = allProducts.filter((p) =>
-      matchedIds.includes(String(p.id))
-    );
+      return {
+        id: item.asin || `live-${index}`,
+        title: item.product_title,
+        price: cleanPrice,
+        original_price: cleanOriginalPrice,
+        image_url: item.product_photo,
+        merchant: "Amazon",
+        category: prompt,
+        tag: item.is_best_seller ? "Bestseller" : item.is_prime ? "Prime" : "Deal",
+        affiliate_url: item.product_url,
+      };
+    });
 
-    // Fallback: If Gemini matched 0 items, apply a basic text filter so the user still gets results
-    if (filteredProducts.length === 0) {
-      const q = prompt.toLowerCase();
-      filteredProducts = allProducts.filter(
-        (p) =>
-          p.title?.toLowerCase().includes(q) ||
-          p.category?.toLowerCase().includes(q)
-      );
-    }
-
-    return NextResponse.json({ results: filteredProducts });
+    return NextResponse.json({ results: formattedResults });
   } catch (err: any) {
-    console.error("Route execution failure:", err);
-    return NextResponse.json({ error: err.message, results: [] }, { status: 500 });
+    console.error("Live Search API error:", err);
+    return NextResponse.json({ error: "Failed to fetch live products" }, { status: 500 });
   }
 }
