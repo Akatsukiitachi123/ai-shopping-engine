@@ -5,30 +5,45 @@ import { supabase } from "@/lib/supabase";
 
 const PAGE_SIZE = 24;
 
+const CATEGORIES = [
+  "All",
+  "Smartphones",
+  "Men Ethnic",
+  "Women Ethnic",
+  "Audio & Tech",
+  "Footwear",
+  "Watches",
+  "Home Decor",
+];
+
 export default function Home() {
   const [products, setProducts] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("All");
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [totalCount, setTotalCount] = useState<number>(0);
 
-  // Initial load on page startup
   useEffect(() => {
-    loadProducts(0, true);
+    loadProducts(0, "All", true);
   }, []);
 
-  const loadProducts = async (pageNumber: number, reset = false) => {
+  const loadProducts = async (pageNumber: number, category: string, reset = false) => {
     const from = pageNumber * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
-    // exact count parameter database ki poori actual sankhya fetch karta hai
-    const { data, count, error } = await supabase
+    let query = supabase
       .from("products")
       .select("*", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(from, to);
+      .order("created_at", { ascending: false });
+
+    if (category !== "All") {
+      query = query.eq("category", category);
+    }
+
+    const { data, count, error } = await query.range(from, to);
 
     if (!error && data) {
       if (count !== null) setTotalCount(count);
@@ -39,24 +54,33 @@ export default function Home() {
       }
       if (data.length < PAGE_SIZE) {
         setHasMore(false);
+      } else {
+        setHasMore(true);
       }
     }
+  };
+
+  const handleCategoryClick = (cat: string) => {
+    setSelectedCategory(cat);
+    setSearchQuery("");
+    setIsSearching(false);
+    setPage(0);
+    loadProducts(0, cat, true);
   };
 
   const handleLoadMore = () => {
     const nextPage = page + 1;
     setPage(nextPage);
-    loadProducts(nextPage);
+    loadProducts(nextPage, selectedCategory);
   };
 
-  // AI Search
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!searchQuery.trim()) {
       setIsSearching(false);
+      setSelectedCategory("All");
       setPage(0);
-      setHasMore(true);
-      loadProducts(0, true);
+      loadProducts(0, "All", true);
       return;
     }
 
@@ -83,8 +107,8 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 px-4 py-12 md:px-8">
-      {/* Header & Search Bar */}
-      <div className="max-w-4xl mx-auto text-center mb-12">
+      {/* Header & Search */}
+      <div className="max-w-4xl mx-auto text-center mb-8">
         <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-4 bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
           Find Any Product or Look in Seconds.
         </h1>
@@ -92,7 +116,7 @@ export default function Home() {
           Powered by Gemini AI. Describe style, budget, or occasions to discover matching products.
         </p>
 
-        <form onSubmit={handleSearch} className="flex gap-2 max-w-2xl mx-auto">
+        <form onSubmit={handleSearch} className="flex gap-2 max-w-2xl mx-auto mb-6">
           <input
             type="text"
             value={searchQuery}
@@ -108,6 +132,27 @@ export default function Home() {
             {loading ? "Searching..." : "Search"}
           </button>
         </form>
+
+        {/* Category Filter Chips */}
+        <div className="flex flex-wrap items-center justify-center gap-2 max-w-3xl mx-auto">
+          {CATEGORIES.map((cat) => {
+            const isActive = !isSearching && selectedCategory === cat;
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => handleCategoryClick(cat)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition ${
+                  isActive
+                    ? "bg-indigo-600 text-white shadow-md"
+                    : "bg-slate-900 text-slate-300 border border-slate-800 hover:border-slate-700 hover:bg-slate-800"
+                }`}
+              >
+                {cat}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Catalog Display */}
@@ -118,20 +163,14 @@ export default function Home() {
               ? "AI is selecting the best matches..."
               : isSearching
               ? `Found ${products.length} Matching Products`
-              : `Catalog Inventory (${totalCount} Total Products Available)`}
+              : `${selectedCategory === "All" ? "Catalog Inventory" : selectedCategory} (${totalCount} Total)`}
           </h2>
-          {isSearching && (
+          {(isSearching || selectedCategory !== "All") && (
             <button
-              onClick={() => {
-                setSearchQuery("");
-                setIsSearching(false);
-                setPage(0);
-                setHasMore(true);
-                loadProducts(0, true);
-              }}
+              onClick={() => handleCategoryClick("All")}
               className="text-xs text-indigo-400 hover:underline"
             >
-              Clear Search
+              Reset Filters
             </button>
           )}
         </div>
