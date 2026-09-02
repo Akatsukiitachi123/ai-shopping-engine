@@ -2,59 +2,81 @@ import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { supabase } from "@/lib/supabase";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+const ai = new GoogleGenAI({ 
+  apiKey: process.env.GEMINI_API_KEY || "" 
+});
 
 export async function POST(req: Request) {
   try {
     const { prompt } = await req.json();
 
-    if (!prompt) {
+    if (!prompt || typeof prompt !== "string") {
       return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
     }
 
-    // 1. Fetch available products from Supabase
+    // 1. Supabase se saare active products fetch karein
     const { data: allProducts, error } = await supabase
       .from("products")
-      .select("*");
+      .select("id, title, category, price, merchant, tag");
 
-    if (error || !allProducts) {
-      return NextResponse.json({ error: "Failed to load catalog" }, { status: 500 });
+    if (error || !allProducts || allProducts.length === 0) {
+      return NextResponse.json({ error: "No products in database" }, { status: 404 });
     }
 
-    // 2. Ask Gemini to analyze user query and pick/rank relevant products
+    // 2. Gemini ko structured inventory provide karein
+    const catalogSummary = allProducts.map((p) => ({
+      id: String(p.id),
+      title: p.title,
+      category: p.category,
+      price: p.price,
+      merchant: p.merchant,
+      tag: p.tag,
+    }));
+
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: `
-You are an expert personal shopping assistant.
-User Search Query: "${prompt}"
+You are an intelligent shopping assistant.
+User Intent / Query: "${prompt}"
 
-Here is the current product catalog (JSON format):
-${JSON.stringify(allProducts)}
+Current Inventory:
+${JSON.stringify(catalogSummary, null, 2)}
 
-Task:
-1. Understand user style, category, or budget requirements.
-2. Return ONLY a valid JSON array of product IDs from the catalog that match the intent best.
-3. If multiple items fit together (e.g. an outfit or bundle), order them accordingly.
+Instructions:
+1. Filter and select ONLY products that match the user's intent, category, keywords, or price budget.
+2. Rank the best matches first.
+3. If no product matches closely, return an empty array [].
+4. Return ONLY a valid JSON array of matched product string IDs. No text, no markdown.
 
-Output format (Strict JSON only, no markdown, no explanation):
-["id-1", "id-2"]
+Example valid output:
+["uuid-1", "uuid-2"]
       `,
     });
 
-    const text = response.text || "[]";
-    const cleanedText = text.replace(/```json|```/g, "").trim();
-    const matchedIds: string[] = JSON.parse(cleanedText);
+    let rawText = response.text || "[]";
+    
+    // Markdown formatting remove karein
+    rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
 
-    // 3. Return matched items in ordered sequence
-    const matchedProducts = matchedIds
-      .map((id) => allProducts.find((p) => p.id === id))
+    let matchedIds: string[] = [];
+    try {
+      matchedIds = JSON.parse(rawText);
+    } catch {
+      matchedIds = [];
+    }
+
+    // 3. Matched IDs ke basis par full product objects filter karein
+    const filteredProducts = matchedIds
+      .map((id) => allProducts.find((p) => String(p.id) === String(id)))
       .filter(Boolean);
 
+    // Agar koi match mila to wahi return karein, warna empty array (taaki user ko pata chale koi match nahi mila)
     return NextResponse.json({
-      results: matchedProducts.length > 0 ? matchedProducts : allProducts,
+      results: filteredProducts,
+      totalMatched: filteredProducts.length,
     });
   } catch (err: any) {
     console.error("AI Search Error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
   }
 }
