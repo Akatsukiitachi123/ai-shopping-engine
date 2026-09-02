@@ -3,29 +3,62 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 
+const PAGE_SIZE = 24;
+
 export default function Home() {
   const [products, setProducts] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
 
-  // Load initial products on startup
+  // Initial products load
   useEffect(() => {
-    async function loadInitial() {
-      const { data } = await supabase
-        .from("products")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (data) setProducts(data);
-    }
-    loadInitial();
+    loadProducts(0, true);
   }, []);
+
+  const loadProducts = async (pageNumber: number, reset = false) => {
+    const from = pageNumber * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (!error && data) {
+      if (reset) {
+        setProducts(data);
+      } else {
+        setProducts((prev) => [...prev, ...data]);
+      }
+      if (data.length < PAGE_SIZE) {
+        setHasMore(false);
+      }
+    }
+  };
+
+  const handleLoadMore = () => {
+    const nextPage = page + 1;
+    setPage(nextPage);
+    loadProducts(nextPage);
+  };
 
   // AI Search Execution
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!searchQuery.trim()) return;
+    if (!searchQuery.trim()) {
+      setIsSearching(false);
+      setPage(0);
+      setHasMore(true);
+      loadProducts(0, true);
+      return;
+    }
 
     setLoading(true);
+    setIsSearching(true);
     try {
       const res = await fetch("/api/ai-search", {
         method: "POST",
@@ -36,6 +69,7 @@ export default function Home() {
       const data = await res.json();
       if (data.results) {
         setProducts(data.results);
+        setHasMore(false);
       }
     } catch (err) {
       console.error("Search failed:", err);
@@ -46,7 +80,6 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 px-4 py-12 md:px-8">
-      {/* Header & Search Bar */}
       <div className="max-w-4xl mx-auto text-center mb-12">
         <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-4 bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
           Find Any Product or Look in Seconds.
@@ -60,7 +93,7 @@ export default function Home() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="e.g. Traditional silk saree under 4000 or rustic wooden table..."
+            placeholder="e.g. Wedding sherwani, running shoes, Noise smartwatch..."
             className="flex-1 px-4 py-3 rounded-lg bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
           />
           <button
@@ -73,17 +106,36 @@ export default function Home() {
         </form>
       </div>
 
-      {/* Product Results */}
       <div className="max-w-6xl mx-auto">
-        <h2 className="text-xl font-semibold mb-6 text-slate-300">
-          {loading ? "AI is selecting the best matches..." : `Showing ${products.length} Products`}
-        </h2>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-semibold text-slate-300">
+            {loading
+              ? "AI is selecting the best matches..."
+              : isSearching
+              ? `Found ${products.length} Matching Products`
+              : `Catalog Inventory (${products.length} Loaded)`}
+          </h2>
+          {isSearching && (
+            <button
+              onClick={() => {
+                setSearchQuery("");
+                setIsSearching(false);
+                setPage(0);
+                setHasMore(true);
+                loadProducts(0, true);
+              }}
+              className="text-xs text-indigo-400 hover:underline"
+            >
+              Clear Search
+            </button>
+          )}
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {products.map((item) => (
             <div
               key={item.id}
-              className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col justify-between hover:border-slate-700 transition"
+              className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col justify-between hover:border-slate-700 transition shadow-lg"
             >
               <div className="relative h-48 w-full bg-slate-800 overflow-hidden">
                 <img
@@ -92,7 +144,7 @@ export default function Home() {
                   className="w-full h-full object-cover"
                 />
                 {item.tag && (
-                  <span className="absolute top-2 left-2 bg-indigo-500 text-white text-xs px-2 py-1 rounded">
+                  <span className="absolute top-2 left-2 bg-indigo-500 text-white text-xs px-2 py-1 rounded font-medium shadow">
                     {item.tag}
                   </span>
                 )}
@@ -130,6 +182,18 @@ export default function Home() {
             </div>
           ))}
         </div>
+
+        {/* Load More Button for Browsing */}
+        {!isSearching && hasMore && (
+          <div className="text-center mt-12">
+            <button
+              onClick={handleLoadMore}
+              className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-sm font-medium border border-slate-700 transition"
+            >
+              Load More Products
+            </button>
+          </div>
+        )}
       </div>
     </main>
   );
