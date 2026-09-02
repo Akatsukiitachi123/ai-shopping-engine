@@ -12,8 +12,9 @@ export default function Home() {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
+  const [totalCount, setTotalCount] = useState<number>(0);
 
-  // Initial products load
+  // Initial load on page startup
   useEffect(() => {
     loadProducts(0, true);
   }, []);
@@ -22,13 +23,15 @@ export default function Home() {
     const from = pageNumber * PAGE_SIZE;
     const to = from + PAGE_SIZE - 1;
 
-    const { data, error } = await supabase
+    // exact count parameter database ki poori actual sankhya fetch karta hai
+    const { data, count, error } = await supabase
       .from("products")
-      .select("*")
+      .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(from, to);
 
     if (!error && data) {
+      if (count !== null) setTotalCount(count);
       if (reset) {
         setProducts(data);
       } else {
@@ -46,7 +49,7 @@ export default function Home() {
     loadProducts(nextPage);
   };
 
-  // AI Search Execution
+  // AI Search
   const handleSearch = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!searchQuery.trim()) {
@@ -80,6 +83,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 px-4 py-12 md:px-8">
+      {/* Header & Search Bar */}
       <div className="max-w-4xl mx-auto text-center mb-12">
         <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-4 bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
           Find Any Product or Look in Seconds.
@@ -106,6 +110,7 @@ export default function Home() {
         </form>
       </div>
 
+      {/* Catalog Display */}
       <div className="max-w-6xl mx-auto">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-semibold text-slate-300">
@@ -113,7 +118,7 @@ export default function Home() {
               ? "AI is selecting the best matches..."
               : isSearching
               ? `Found ${products.length} Matching Products`
-              : `Catalog Inventory (${products.length} Loaded)`}
+              : `Catalog Inventory (${totalCount} Total Products Available)`}
           </h2>
           {isSearching && (
             <button
@@ -183,7 +188,7 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Load More Button for Browsing */}
+        {/* Load More Button */}
         {!isSearching && hasMore && (
           <div className="text-center mt-12">
             <button
