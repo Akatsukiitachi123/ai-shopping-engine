@@ -11,35 +11,34 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
-  // 1. Product fetch karein
-  const { data: product, error } = await supabase
+  // 1. Database se product title fetch karein
+  const { data: product } = await supabase
     .from("products")
-    .select("id, title, merchant, clicks")
+    .select("id, title, affiliate_url, clicks")
     .eq("id", productId)
     .single();
 
-  if (error || !product) {
+  if (!product) {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
-  // 2. Clicks update karein
+  // 2. Click count increment karein
   await supabase
     .from("products")
     .update({ clicks: (product.clicks || 0) + 1 })
     .eq("id", productId);
 
-  // 3. Guaranteed Direct Search Landing
-  // Har product ke title se direct merchant search URL generate hoga
-  const encodedTitle = encodeURIComponent(product.title || "deals");
-  const merchant = (product.merchant || "").toLowerCase();
+  const rawUrl = (product.affiliate_url || "").trim();
 
-  let destinationUrl = `https://www.amazon.in/s?k=${encodedTitle}`;
-
-  if (merchant.includes("flipkart")) {
-    destinationUrl = `https://www.flipkart.com/search?q=${encodedTitle}`;
-  } else if (merchant.includes("myntra")) {
-    destinationUrl = `https://www.myntra.com/${encodeURIComponent(product.title.replace(/\s+/g, "-"))}`;
+  // 3. Agar direct valid product page link hai (jisme /dp/ ya specific item path ho)
+  if (rawUrl.includes("/dp/") || rawUrl.includes("/p/")) {
+    return NextResponse.redirect(rawUrl, 302);
   }
 
-  return NextResponse.redirect(destinationUrl, 302);
+  // 4. Guaranteed Direct Single Product Landing:
+  // Kisi bhi homepage ya broken redirect link ko bypass karke direct Amazon product search par land karwayenge
+  const safeTitle = encodeURIComponent(product.title || "product deal");
+  const directStoreUrl = `https://www.amazon.in/s?k=${safeTitle}`;
+
+  return NextResponse.redirect(directStoreUrl, 302);
 }
