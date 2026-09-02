@@ -1,30 +1,52 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@supabase/supabase-js";
 
-const ai = new GoogleGenAI({ 
-  apiKey: process.env.GEMINI_API_KEY || "" 
-});
+// Ensure Supabase client is initialized with proper fallbacks
+const supabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://udzdhzkbvtedyntmrpxk.supabase.co";
+const supabaseAnonKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "sb_publishable_fy-dldocPXNcQGWHT45Uqw_iPOAbxh-";
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export async function POST(req: Request) {
   try {
     const { prompt } = await req.json();
 
     if (!prompt || typeof prompt !== "string") {
-      return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
+      return NextResponse.json({ error: "Prompt is required", results: [] }, { status: 400 });
     }
 
-    // 1. Supabase se saare active products fetch karein
-    const { data: allProducts, error } = await supabase
+    // 1. Fetch complete product details from Supabase
+    const { data: allProducts, error: dbError } = await supabase
       .from("products")
-      .select("id, title, category, price, merchant, tag");
+      .select("*");
 
-    if (error || !allProducts || allProducts.length === 0) {
-      return NextResponse.json({ error: "No products in database" }, { status: 404 });
+    if (dbError || !allProducts || allProducts.length === 0) {
+      console.error("DB Error:", dbError);
+      return NextResponse.json({ error: "No products available", results: [] }, { status: 500 });
     }
 
-    // 2. Gemini ko structured inventory provide karein
-    const catalogSummary = allProducts.map((p) => ({
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("GEMINI_API_KEY is missing in environment variables.");
+      // Fallback keyword search if API key is not present
+      const queryLower = prompt.toLowerCase();
+      const fallback = allProducts.filter(
+        (p) =>
+          p.title?.toLowerCase().includes(queryLower) ||
+          p.category?.toLowerCase().includes(queryLower) ||
+          p.tag?.toLowerCase().includes(queryLower)
+      );
+      return NextResponse.json({ results: fallback });
+    }
+
+    // 2. Initialize Gemini with active key
+    const ai = new GoogleGenAI({ apiKey });
+
+    const catalogContext = allProducts.map((p) => ({
       id: String(p.id),
       title: p.title,
       category: p.category,
@@ -35,48 +57,44 @@ export async function POST(req: Request) {
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
-      contents: `
-You are an intelligent shopping assistant.
-User Intent / Query: "${prompt}"
+      contents: `You are an AI product matching system.
+Query: "${prompt}"
 
-Current Inventory:
-${JSON.stringify(catalogSummary, null, 2)}
+Available inventory:
+${JSON.stringify(catalogContext)}
 
-Instructions:
-1. Filter and select ONLY products that match the user's intent, category, keywords, or price budget.
-2. Rank the best matches first.
-3. If no product matches closely, return an empty array [].
-4. Return ONLY a valid JSON array of matched product string IDs. No text, no markdown.
-
-Example valid output:
-["uuid-1", "uuid-2"]
-      `,
+Select only items that match the user request by style, category, or price.
+Return strictly a JSON array containing only the string IDs of the matched items. Example: ["id1", "id2"]. If nothing matches, return [].`,
     });
 
-    let rawText = response.text || "[]";
-    
-    // Markdown formatting remove karein
-    rawText = rawText.replace(/```json/gi, "").replace(/```/g, "").trim();
+    const responseText = response.text ? response.text.trim() : "[]";
+    const cleanedJson = responseText.replace(/```json|```/g, "").trim();
 
     let matchedIds: string[] = [];
     try {
-      matchedIds = JSON.parse(rawText);
+      matchedIds = JSON.parse(cleanedJson);
     } catch {
       matchedIds = [];
     }
 
-    // 3. Matched IDs ke basis par full product objects filter karein
-    const filteredProducts = matchedIds
-      .map((id) => allProducts.find((p) => String(p.id) === String(id)))
-      .filter(Boolean);
+    // Map matched IDs back to the full product records (including images and URLs)
+    let filteredProducts = allProducts.filter((p) =>
+      matchedIds.includes(String(p.id))
+    );
 
-    // Agar koi match mila to wahi return karein, warna empty array (taaki user ko pata chale koi match nahi mila)
-    return NextResponse.json({
-      results: filteredProducts,
-      totalMatched: filteredProducts.length,
-    });
+    // Fallback: If Gemini matched 0 items, apply a basic text filter so the user still gets results
+    if (filteredProducts.length === 0) {
+      const q = prompt.toLowerCase();
+      filteredProducts = allProducts.filter(
+        (p) =>
+          p.title?.toLowerCase().includes(q) ||
+          p.category?.toLowerCase().includes(q)
+      );
+    }
+
+    return NextResponse.json({ results: filteredProducts });
   } catch (err: any) {
-    console.error("AI Search Error:", err);
-    return NextResponse.json({ error: err.message || "Internal error" }, { status: 500 });
+    console.error("Route execution failure:", err);
+    return NextResponse.json({ error: err.message, results: [] }, { status: 500 });
   }
 }
