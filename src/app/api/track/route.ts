@@ -19,50 +19,56 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const searchUrl = `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(
+    // Real-Time Product Search (Multi-Store: Amazon, Flipkart, TataCliq)
+    const searchUrl = `https://real-time-product-search.p.rapidapi.com/search?q=${encodeURIComponent(
       prompt
-    )}&page=1&country=IN`;
+    )}&country=in&language=en`;
 
     const response = await fetch(searchUrl, {
       method: "GET",
       headers: {
         "x-rapidapi-key": apiKey,
-        "x-rapidapi-host": "real-time-amazon-data.p.rapidapi.com",
+        "x-rapidapi-host": "real-time-product-search.p.rapidapi.com",
       },
     });
 
     const json = await response.json();
-    const items = json?.data?.products || [];
+    const items = json?.data || [];
 
-    const formattedResults = items.slice(0, 16).map((item: any, index: number) => {
-      const cleanPrice = item.product_price
-        ? item.product_price.replace(/[^0-9.]/g, "")
-        : "Check Price";
-      const cleanOriginalPrice = item.product_original_price
-        ? item.product_original_price.replace(/[^0-9.]/g, "")
-        : null;
+    const formattedResults = items.slice(0, 20).map((item: any, index: number) => {
+      // Direct single product page URL
+      const directUrl =
+        item.product_page_url ||
+        item.offer?.offer_page_url ||
+        item.product_url ||
+        item.url;
 
-      // Bulletproof Amazon Single Product URL using ASIN
-      const directProductUrl = item.asin
-        ? `https://www.amazon.in/dp/${item.asin}`
-        : item.product_url;
+      const cleanPrice = item.offer?.price || item.product_price || item.price || "Check Price";
+      const cleanOriginalPrice = item.offer?.original_price || item.product_original_price || null;
+
+      // Merchant identification (Flipkart, Amazon, TataCliq)
+      const storeName = item.offer?.store_name || item.store_name || item.merchant || "Online Store";
 
       return {
-        id: item.asin || `live-${index}`,
-        title: item.product_title,
+        id: item.product_id || `product-${index}`,
+        title: item.product_title || item.title || "Product",
         price: cleanPrice,
         original_price: cleanOriginalPrice,
-        image_url: item.product_photo,
-        merchant: "Amazon",
+        image_url:
+          item.product_photos?.[0] ||
+          item.product_photo ||
+          item.photo ||
+          "https://placehold.co/600x400?text=Product",
+        merchant: storeName,
         category: prompt,
-        tag: item.is_best_seller ? "Bestseller" : item.is_prime ? "Prime" : "Deal",
-        affiliate_url: directProductUrl,
+        tag: item.product_rating ? `⭐ ${item.product_rating}` : storeName,
+        affiliate_url: directUrl,
       };
     });
 
     return NextResponse.json({ results: formattedResults });
   } catch (err: any) {
-    console.error("Live Search API error:", err);
-    return NextResponse.json({ error: "Failed to fetch live products" }, { status: 500 });
+    console.error("Multi-Store Search API error:", err);
+    return NextResponse.json({ error: "Failed to fetch multi-store products" }, { status: 500 });
   }
 }
