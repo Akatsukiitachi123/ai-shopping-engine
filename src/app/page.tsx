@@ -112,6 +112,15 @@ export default function Home() {
   };
 
   const handleBuyNow = (item: any) => {
+    // 1. Direct single product page (Database ya API URL)
+    const targetUrl = item?.affiliate_url || item?.product_url || item?.url;
+
+    if (targetUrl && targetUrl.startsWith("http")) {
+      window.open(targetUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    // 2. Fallback store landing
     const merchant = (item?.merchant || "").toLowerCase();
     const title = item?.title || "";
     const cleanQuery = encodeURIComponent(
@@ -119,20 +128,13 @@ export default function Home() {
         .replace(/[^\w\s]/gi, " ")
         .split(" ")
         .filter(Boolean)
-        .slice(0, 6)
+        .slice(0, 5)
         .join(" ")
     );
 
-    const rawUrl = item?.affiliate_url || item?.product_url || "";
-
-    if (rawUrl && (rawUrl.includes("/p/") || rawUrl.includes("/dp/") || rawUrl.includes("p-mp"))) {
-      window.open(rawUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-
     if (merchant.includes("flipkart")) {
       window.open(
-        `https://www.flipkart.com/search?q=${cleanQuery}&otracker=search&marketplace=FLIPKART&as-show=off`,
+        `https://www.flipkart.com/search?q=${cleanQuery}`,
         "_blank",
         "noopener,noreferrer"
       );
@@ -148,17 +150,8 @@ export default function Home() {
       return;
     }
 
-    if (merchant.includes("myntra")) {
-      window.open(
-        `https://www.myntra.com/${cleanQuery}`,
-        "_blank",
-        "noopener,noreferrer"
-      );
-      return;
-    }
-
     window.open(
-      `https://www.amazon.in/s?k=${cleanQuery}&ref=nb_sb_noss`,
+      `https://www.amazon.in/s?k=${cleanQuery}`,
       "_blank",
       "noopener,noreferrer"
     );
