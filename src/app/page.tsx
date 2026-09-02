@@ -124,7 +124,7 @@ export default function Home() {
           <button
             type="submit"
             disabled={loading}
-            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 font-semibold rounded-lg transition disabled:opacity-50"
+            className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 font-semibold rounded-lg transition disabled:opacity-50 cursor-pointer"
           >
             {loading ? "Searching..." : "Search"}
           </button>
@@ -165,7 +165,7 @@ export default function Home() {
           {(isSearching || selectedCategory !== "All") && (
             <button
               onClick={() => handleCategoryClick("All")}
-              className="text-xs text-indigo-400 hover:underline"
+              className="text-xs text-indigo-400 hover:underline cursor-pointer"
             >
               Reset Filters
             </button>
@@ -211,7 +211,7 @@ export default function Home() {
                     )}
                   </div>
                   <a
-                    href={item.affiliate_url}
+                    href={`/api/track?id=${item.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md font-medium"
@@ -229,7 +229,7 @@ export default function Home() {
           <div className="text-center mt-12">
             <button
               onClick={handleLoadMore}
-              className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-sm font-medium border border-slate-700 transition"
+              className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-sm font-medium border border-slate-700 transition cursor-pointer"
             >
               Load More Products
             </button>
