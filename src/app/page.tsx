@@ -94,9 +94,13 @@ export default function Home() {
       });
 
       const data = await res.json();
-      if (Array.isArray(data?.results)) {
+      console.log("Search Response:", data);
+
+      if (Array.isArray(data?.results) && data.results.length > 0) {
         setProducts(data.results);
         setHasMore(false);
+      } else {
+        alert("No multi-store results found from API. Check terminal/console logs.");
       }
     } catch (err) {
       console.error("Search error:", err);
@@ -106,7 +110,7 @@ export default function Home() {
   };
 
   const handleBuyNow = (item: any) => {
-    const url = item?.affiliate_url || `/api/track?id=${item?.id}`;
+    const url = item?.affiliate_url || item?.product_url || `/api/track?id=${item?.id}`;
     window.open(url, "_blank");
   };
 
@@ -120,10 +124,10 @@ export default function Home() {
     <main className="min-h-screen bg-slate-950 text-slate-100 px-4 py-12 md:px-8">
       <div className="max-w-4xl mx-auto text-center mb-8">
         <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-4 bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
-          Find Any Product or Look in Seconds.
+          Multi-Store Shopping Search Engine
         </h1>
         <p className="text-slate-400 mb-8">
-          Powered by Gemini AI. Search live deals, smartphones, fashion, and tech.
+          Compare Amazon, Flipkart, TataCliq, and more in real time.
         </p>
 
         <form onSubmit={handleSearch} className="flex gap-2 max-w-2xl mx-auto mb-6">
@@ -131,7 +135,7 @@ export default function Home() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="e.g. OnePlus 12, Sony headphones, Puma shoes..."
+            placeholder="Try 'Flipkart shoes', 'TataCliq watch', 'OnePlus 12'..."
             className="flex-1 px-4 py-3 rounded-lg bg-slate-900 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
           />
           <button
@@ -139,7 +143,7 @@ export default function Home() {
             disabled={loading}
             className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 font-semibold rounded-lg transition disabled:opacity-50 cursor-pointer"
           >
-            {loading ? "Searching..." : "Search"}
+            {loading ? "Searching..." : "Search Stores"}
           </button>
         </form>
 
@@ -168,9 +172,9 @@ export default function Home() {
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-semibold text-slate-300">
             {loading
-              ? "Fetching products..."
+              ? "Fetching live multi-store prices..."
               : isSearching
-              ? `Found ${products.length} Products`
+              ? `Live Results (${products.length} Stores Found)`
               : `${selectedCategory === "All" ? "Catalog Inventory" : selectedCategory} (${totalCount} Total)`}
           </h2>
           {(isSearching || selectedCategory !== "All") && (
@@ -185,60 +189,75 @@ export default function Home() {
 
         {products.length === 0 && !loading ? (
           <div className="text-center py-16 bg-slate-900 border border-slate-800 rounded-xl">
-            <p className="text-slate-400">Search for any product above to view live Amazon deals.</p>
+            <p className="text-slate-400">No products found. Try a different search.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {products.map((item, index) => (
-              <div
-                key={item?.id || index}
-                className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col justify-between hover:border-slate-700 transition shadow-lg"
-              >
-                <div className="relative h-56 w-full bg-slate-800 flex items-center justify-center p-3">
-                  <img
-                    src={item?.image_url || "https://placehold.co/600x400?text=Product"}
-                    alt={item?.title || "Product"}
-                    className="max-h-full max-w-full object-contain rounded-md"
-                  />
-                  {item?.tag && (
-                    <span className="absolute top-2 left-2 bg-indigo-500 text-white text-xs px-2 py-1 rounded font-medium shadow">
-                      {item.tag}
-                    </span>
-                  )}
-                </div>
+            {products.map((item, index) => {
+              const merchantName = item?.merchant || item?.store || "Store";
+              const isAmazon = merchantName.toLowerCase().includes("amazon");
+              const isFlipkart = merchantName.toLowerCase().includes("flipkart");
+              const isTata = merchantName.toLowerCase().includes("tata");
 
-                <div className="p-4 flex flex-col flex-1 justify-between">
-                  <div>
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      {item?.merchant || "Amazon"} · {item?.category || "General"}
-                    </span>
-                    <h3 className="text-sm font-medium text-white mt-1 line-clamp-2">
-                      {item?.title || "Product Details"}
-                    </h3>
-                  </div>
+              const badgeColor = isFlipkart
+                ? "bg-blue-600 text-white"
+                : isTata
+                ? "bg-purple-600 text-white"
+                : isAmazon
+                ? "bg-amber-600 text-white"
+                : "bg-emerald-600 text-white";
 
-                  <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
-                    <div>
-                      <span className="text-lg font-bold text-white">
-                        {formatPrice(item?.price)}
-                      </span>
-                      {item?.original_price && (
-                        <span className="text-xs text-slate-500 line-through ml-2">
-                          {formatPrice(item?.original_price)}
-                        </span>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleBuyNow(item)}
-                      className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md font-medium cursor-pointer"
+              return (
+                <div
+                  key={item?.id || index}
+                  className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col justify-between hover:border-slate-700 transition shadow-lg"
+                >
+                  <div className="relative h-56 w-full bg-slate-800 flex items-center justify-center p-3">
+                    <img
+                      src={item?.image_url || "https://placehold.co/600x400?text=Product"}
+                      alt={item?.title || "Product"}
+                      className="max-h-full max-w-full object-contain rounded-md"
+                    />
+                    <span
+                      className={`absolute top-2 left-2 text-xs font-bold px-2.5 py-1 rounded shadow ${badgeColor}`}
                     >
-                      Buy Now
-                    </button>
+                      {merchantName}
+                    </span>
+                  </div>
+
+                  <div className="p-4 flex flex-col flex-1 justify-between">
+                    <div>
+                      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                        {item?.tag || merchantName}
+                      </span>
+                      <h3 className="text-sm font-medium text-white mt-1 line-clamp-2">
+                        {item?.title || "Product Details"}
+                      </h3>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
+                      <div>
+                        <span className="text-lg font-bold text-white">
+                          {formatPrice(item?.price)}
+                        </span>
+                        {item?.original_price && (
+                          <span className="text-xs text-slate-500 line-through ml-2">
+                            {formatPrice(item?.original_price)}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleBuyNow(item)}
+                        className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md font-medium cursor-pointer"
+                      >
+                        Visit {merchantName}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
