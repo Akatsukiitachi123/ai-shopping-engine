@@ -11,18 +11,13 @@ export async function POST(req: NextRequest) {
     }
 
     const apiKey = process.env.RAPIDAPI_KEY;
-
     if (!apiKey) {
-      return NextResponse.json(
-        { error: "RAPIDAPI_KEY is missing in environment variables" },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: "RAPIDAPI_KEY missing" }, { status: 500 });
     }
 
-    // Google Shopping / Multi-Store endpoint
     const searchUrl = `https://real-time-product-search.p.rapidapi.com/search?q=${encodeURIComponent(
       prompt
-    )}&country=in&language=en&limit=20`;
+    )}&country=in&language=en`;
 
     const response = await fetch(searchUrl, {
       method: "GET",
@@ -33,75 +28,51 @@ export async function POST(req: NextRequest) {
     });
 
     const json = await response.json();
-    
-    // API ya toh array deti hai ya data.products
-    const items = Array.isArray(json?.data) 
-      ? json.data 
-      : json?.data?.products || [];
 
-    if (!items || items.length === 0) {
-      console.log("No items returned from API:", json);
-      return NextResponse.json({ results: [] });
+    // Check if RapidAPI returned an error (e.g. Not Subscribed)
+    if (json.message || json.status === "ERROR") {
+      console.error("RapidAPI Error:", json);
+      return NextResponse.json(
+        { error: json.message || "API subscription required" },
+        { status: 400 }
+      );
     }
 
-    const formattedResults = items.map((item: any, index: number) => {
-      // 1. Direct single product page URL
-      const directUrl =
-        item.offer?.offer_page_url ||
-        item.product_page_url ||
-        item.product_url ||
-        item.url ||
-        `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(item.product_title || prompt)}`;
+    const items = Array.isArray(json?.data) ? json.data : [];
 
-      // 2. Exact Store Name (Flipkart, Tata CLiQ, Amazon, Myntra, etc.)
-      let store =
+    const formattedResults = items.map((item: any, index: number) => {
+      // 1. Direct deep link
+      const directUrl =
+        item.product_page_url ||
+        item.offer?.offer_page_url ||
+        item.product_url ||
+        item.url;
+
+      // 2. Exact Merchant Name (Flipkart, Tata CLiQ, Amazon, etc.)
+      const storeName =
         item.offer?.store_name ||
         item.store_name ||
-        item.typical_price_range?.[2] ||
         "Online Store";
-
-      // Title se store detect karna agar API tag na de
-      const fullText = `${item.product_title || ""} ${directUrl}`.toLowerCase();
-      if (fullText.includes("flipkart")) store = "Flipkart";
-      else if (fullText.includes("tatacliq") || fullText.includes("tata cliq")) store = "Tata CLiQ";
-      else if (fullText.includes("myntra")) store = "Myntra";
-      else if (fullText.includes("croma")) store = "Croma";
-      else if (fullText.includes("amazon")) store = "Amazon";
-
-      // 3. Price formatting
-      const price =
-        item.offer?.price ||
-        item.product_price ||
-        item.price ||
-        "Check Price";
-
-      const originalPrice =
-        item.offer?.original_price ||
-        item.product_original_price ||
-        null;
-
-      const photo =
-        item.product_photos?.[0] ||
-        item.product_photo ||
-        item.photo ||
-        "https://placehold.co/600x400?text=Product";
 
       return {
         id: item.product_id || `prod-${index}`,
         title: item.product_title || item.title || "Product",
-        price: price,
-        original_price: originalPrice,
-        image_url: photo,
-        merchant: store,
+        price: item.offer?.price || item.product_price || "Check Price",
+        original_price: item.offer?.original_price || null,
+        image_url:
+          item.product_photos?.[0] ||
+          item.product_photo ||
+          "https://placehold.co/600x400?text=Product",
+        merchant: storeName,
         category: prompt,
-        tag: store,
+        tag: storeName,
         affiliate_url: directUrl,
       };
     });
 
     return NextResponse.json({ results: formattedResults });
   } catch (err: any) {
-    console.error("Multi-Store Search API error:", err);
-    return NextResponse.json({ error: "Failed to fetch multi-store products", results: [] }, { status: 500 });
+    console.error("Multi-Store Search Error:", err);
+    return NextResponse.json({ error: err.message, results: [] }, { status: 500 });
   }
 }
