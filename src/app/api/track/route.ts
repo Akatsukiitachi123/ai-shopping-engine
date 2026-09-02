@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Real-Time Product Search (Multi-Store: Amazon, Flipkart, TataCliq)
+    // Direct Multi-Store Search API (Covers Amazon, Flipkart, TataCliq, Croma)
     const searchUrl = `https://real-time-product-search.p.rapidapi.com/search?q=${encodeURIComponent(
       prompt
     )}&country=in&language=en`;
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     const items = json?.data || [];
 
     const formattedResults = items.slice(0, 20).map((item: any, index: number) => {
-      // Direct single product page URL
+      // Direct store product page
       const directUrl =
         item.product_page_url ||
         item.offer?.offer_page_url ||
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       const cleanPrice = item.offer?.price || item.product_price || item.price || "Check Price";
       const cleanOriginalPrice = item.offer?.original_price || item.product_original_price || null;
 
-      // Merchant identification (Flipkart, Amazon, TataCliq)
+      // Extract merchant name (Flipkart, Amazon, TataCliq, etc.)
       const storeName = item.offer?.store_name || item.store_name || item.merchant || "Online Store";
 
       return {
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
           "https://placehold.co/600x400?text=Product",
         merchant: storeName,
         category: prompt,
-        tag: item.product_rating ? `⭐ ${item.product_rating}` : storeName,
+        tag: storeName,
         affiliate_url: directUrl,
       };
     });
