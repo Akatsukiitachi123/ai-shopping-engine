@@ -86,7 +86,7 @@ export default function Home() {
 
     setLoading(true);
     setIsSearching(true);
-    setProducts([]); // Purana Supabase catalog turant screen se clear
+    setProducts([]);
 
     try {
       const res = await fetch("/api/ai-search", {
@@ -112,12 +112,56 @@ export default function Home() {
   };
 
   const handleBuyNow = (item: any) => {
-    const targetUrl =
-      item?.affiliate_url ||
-      item?.product_url ||
-      item?.url ||
-      `/api/track?id=${item?.id}`;
-    window.open(targetUrl, "_blank", "noopener,noreferrer");
+    const merchant = (item?.merchant || "").toLowerCase();
+    const title = item?.title || "";
+    const cleanQuery = encodeURIComponent(
+      title
+        .replace(/[^\w\s]/gi, " ")
+        .split(" ")
+        .filter(Boolean)
+        .slice(0, 6)
+        .join(" ")
+    );
+
+    const rawUrl = item?.affiliate_url || item?.product_url || "";
+
+    if (rawUrl && (rawUrl.includes("/p/") || rawUrl.includes("/dp/") || rawUrl.includes("p-mp"))) {
+      window.open(rawUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    if (merchant.includes("flipkart")) {
+      window.open(
+        `https://www.flipkart.com/search?q=${cleanQuery}&otracker=search&marketplace=FLIPKART&as-show=off`,
+        "_blank",
+        "noopener,noreferrer"
+      );
+      return;
+    }
+
+    if (merchant.includes("tata")) {
+      window.open(
+        `https://www.tatacliq.com/search/?searchCategory=all&text=${cleanQuery}`,
+        "_blank",
+        "noopener,noreferrer"
+      );
+      return;
+    }
+
+    if (merchant.includes("myntra")) {
+      window.open(
+        `https://www.myntra.com/${cleanQuery}`,
+        "_blank",
+        "noopener,noreferrer"
+      );
+      return;
+    }
+
+    window.open(
+      `https://www.amazon.in/s?k=${cleanQuery}&ref=nb_sb_noss`,
+      "_blank",
+      "noopener,noreferrer"
+    );
   };
 
   const formatPrice = (val: any) => {
