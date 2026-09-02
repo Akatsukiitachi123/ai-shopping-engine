@@ -52,11 +52,7 @@ export default function Home() {
       } else {
         setProducts((prev) => [...prev, ...data]);
       }
-      if (data.length < PAGE_SIZE) {
-        setHasMore(false);
-      } else {
-        setHasMore(true);
-      }
+      setHasMore(data.length === PAGE_SIZE);
     }
   };
 
@@ -116,6 +112,7 @@ export default function Home() {
           Powered by Gemini AI. Describe style, budget, or occasions to discover matching products.
         </p>
 
+        {/* Search Bar */}
         <form onSubmit={handleSearch} className="flex gap-2 max-w-2xl mx-auto mb-6">
           <input
             type="text"
@@ -134,7 +131,7 @@ export default function Home() {
         </form>
 
         {/* Category Filter Chips */}
-        <div className="flex flex-wrap items-center justify-center gap-2 max-w-3xl mx-auto">
+        <div className="flex flex-wrap items-center justify-center gap-2 max-w-3xl mx-auto pt-2">
           {CATEGORIES.map((cat) => {
             const isActive = !isSearching && selectedCategory === cat;
             return (
@@ -142,10 +139,10 @@ export default function Home() {
                 key={cat}
                 type="button"
                 onClick={() => handleCategoryClick(cat)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition ${
+                className={`px-4 py-2 rounded-full text-xs font-medium cursor-pointer transition border ${
                   isActive
-                    ? "bg-indigo-600 text-white shadow-md"
-                    : "bg-slate-900 text-slate-300 border border-slate-800 hover:border-slate-700 hover:bg-slate-800"
+                    ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20"
+                    : "bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800 hover:border-slate-700"
                 }`}
               >
                 {cat}
@@ -156,7 +153,7 @@ export default function Home() {
       </div>
 
       {/* Catalog Display */}
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-6xl mx-auto mt-8">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-semibold text-slate-300">
             {loading
