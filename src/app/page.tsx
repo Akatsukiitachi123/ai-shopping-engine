@@ -109,9 +109,14 @@ export default function Home() {
     }
   };
 
+  const formatPrice = (val: any) => {
+    if (!val) return "";
+    const str = String(val).trim();
+    return str.startsWith("₹") ? str : `₹${str}`;
+  };
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 px-4 py-12 md:px-8">
-      {/* Header & Search */}
       <div className="max-w-4xl mx-auto text-center mb-8">
         <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight mb-4 bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent">
           Find Any Product or Look in Seconds.
@@ -120,7 +125,6 @@ export default function Home() {
           Powered by Gemini AI. Describe style, budget, or occasions to discover matching products.
         </p>
 
-        {/* Search Bar */}
         <form onSubmit={handleSearch} className="flex gap-2 max-w-2xl mx-auto mb-6">
           <input
             type="text"
@@ -138,7 +142,6 @@ export default function Home() {
           </button>
         </form>
 
-        {/* Category Filter Chips */}
         <div className="flex flex-wrap items-center justify-center gap-2 max-w-3xl mx-auto pt-2">
           {CATEGORIES.map((cat) => {
             const isActive = !isSearching && selectedCategory === cat;
@@ -160,7 +163,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Catalog Display */}
       <div className="max-w-6xl mx-auto mt-8">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-semibold text-slate-300">
@@ -181,15 +183,15 @@ export default function Home() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {products.map((item) => (
+          {products.map((item, index) => (
             <div
-              key={item.id}
+              key={item.id || index}
               className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col justify-between hover:border-slate-700 transition shadow-lg"
             >
               <div className="relative h-56 w-full bg-slate-800 flex items-center justify-center p-3">
                 <img
                   src={item.image_url || "https://placehold.co/600x400?text=Product"}
-                  alt={item.title}
+                  alt={item.title || "Product"}
                   className="max-h-full max-w-full object-contain rounded-md"
                 />
                 {item.tag && (
@@ -202,21 +204,21 @@ export default function Home() {
               <div className="p-4 flex flex-col flex-1 justify-between">
                 <div>
                   <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    {item.merchant} · {item.category}
+                    {item.merchant || "Amazon"} · {item.category || "General"}
                   </span>
                   <h3 className="text-sm font-medium text-white mt-1 line-clamp-2">
-                    {item.title}
+                    {item.title || "Untitled Product"}
                   </h3>
                 </div>
 
                 <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
                   <div>
                     <span className="text-lg font-bold text-white">
-                      {item.price.startsWith("₹") ? item.price : `₹${item.price}`}
+                      {formatPrice(item.price)}
                     </span>
                     {item.original_price && (
                       <span className="text-xs text-slate-500 line-through ml-2">
-                        {item.original_price.startsWith("₹") ? item.original_price : `₹${item.original_price}`}
+                        {formatPrice(item.original_price)}
                       </span>
                     )}
                   </div>
@@ -233,7 +235,6 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Load More Button */}
         {!isSearching && hasMore && (
           <div className="text-center mt-12">
             <button
