@@ -19,10 +19,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Direct Multi-Store Search API (Covers Amazon, Flipkart, TataCliq, Croma)
+    // Google Shopping / Multi-Store endpoint
     const searchUrl = `https://real-time-product-search.p.rapidapi.com/search?q=${encodeURIComponent(
       prompt
-    )}&country=in&language=en`;
+    )}&country=in&language=en&limit=20`;
 
     const response = await fetch(searchUrl, {
       method: "GET",
@@ -33,35 +33,68 @@ export async function POST(req: NextRequest) {
     });
 
     const json = await response.json();
-    const items = json?.data || [];
+    
+    // API ya toh array deti hai ya data.products
+    const items = Array.isArray(json?.data) 
+      ? json.data 
+      : json?.data?.products || [];
 
-    const formattedResults = items.slice(0, 20).map((item: any, index: number) => {
-      // Direct store product page
+    if (!items || items.length === 0) {
+      console.log("No items returned from API:", json);
+      return NextResponse.json({ results: [] });
+    }
+
+    const formattedResults = items.map((item: any, index: number) => {
+      // 1. Direct single product page URL
       const directUrl =
-        item.product_page_url ||
         item.offer?.offer_page_url ||
+        item.product_page_url ||
         item.product_url ||
-        item.url;
+        item.url ||
+        `https://www.google.com/search?tbm=shop&q=${encodeURIComponent(item.product_title || prompt)}`;
 
-      const cleanPrice = item.offer?.price || item.product_price || item.price || "Check Price";
-      const cleanOriginalPrice = item.offer?.original_price || item.product_original_price || null;
+      // 2. Exact Store Name (Flipkart, Tata CLiQ, Amazon, Myntra, etc.)
+      let store =
+        item.offer?.store_name ||
+        item.store_name ||
+        item.typical_price_range?.[2] ||
+        "Online Store";
 
-      // Extract merchant name (Flipkart, Amazon, TataCliq, etc.)
-      const storeName = item.offer?.store_name || item.store_name || item.merchant || "Online Store";
+      // Title se store detect karna agar API tag na de
+      const fullText = `${item.product_title || ""} ${directUrl}`.toLowerCase();
+      if (fullText.includes("flipkart")) store = "Flipkart";
+      else if (fullText.includes("tatacliq") || fullText.includes("tata cliq")) store = "Tata CLiQ";
+      else if (fullText.includes("myntra")) store = "Myntra";
+      else if (fullText.includes("croma")) store = "Croma";
+      else if (fullText.includes("amazon")) store = "Amazon";
+
+      // 3. Price formatting
+      const price =
+        item.offer?.price ||
+        item.product_price ||
+        item.price ||
+        "Check Price";
+
+      const originalPrice =
+        item.offer?.original_price ||
+        item.product_original_price ||
+        null;
+
+      const photo =
+        item.product_photos?.[0] ||
+        item.product_photo ||
+        item.photo ||
+        "https://placehold.co/600x400?text=Product";
 
       return {
-        id: item.product_id || `product-${index}`,
+        id: item.product_id || `prod-${index}`,
         title: item.product_title || item.title || "Product",
-        price: cleanPrice,
-        original_price: cleanOriginalPrice,
-        image_url:
-          item.product_photos?.[0] ||
-          item.product_photo ||
-          item.photo ||
-          "https://placehold.co/600x400?text=Product",
-        merchant: storeName,
+        price: price,
+        original_price: originalPrice,
+        image_url: photo,
+        merchant: store,
         category: prompt,
-        tag: storeName,
+        tag: store,
         affiliate_url: directUrl,
       };
     });
@@ -69,6 +102,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ results: formattedResults });
   } catch (err: any) {
     console.error("Multi-Store Search API error:", err);
-    return NextResponse.json({ error: "Failed to fetch multi-store products" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to fetch multi-store products", results: [] }, { status: 500 });
   }
 }
