@@ -101,6 +101,10 @@ export default function Home() {
     }
   };
 
+  const handleBuyNow = (id: string | number) => {
+    window.open(`/api/track?id=${id}`, "_blank");
+  };
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 px-4 py-12 md:px-8">
       {/* Header & Search */}
@@ -210,14 +214,13 @@ export default function Home() {
                       </span>
                     )}
                   </div>
-                  <a
-                    href={`/api/track?id=${item.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md font-medium"
+                  <button
+                    type="button"
+                    onClick={() => handleBuyNow(item.id)}
+                    className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-md font-medium cursor-pointer"
                   >
                     Buy Now
-                  </a>
+                  </button>
                 </div>
               </div>
             </div>
