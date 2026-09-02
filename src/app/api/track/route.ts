@@ -1,44 +1,68 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const productId = searchParams.get("id");
+export async function POST(req: NextRequest) {
+  try {
+    const { prompt } = await req.json();
 
-  if (!productId) {
-    return NextResponse.redirect(new URL("/", req.url));
+    if (!prompt || !prompt.trim()) {
+      return NextResponse.json({ results: [] });
+    }
+
+    const apiKey = process.env.RAPIDAPI_KEY;
+
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "RAPIDAPI_KEY is missing in environment variables" },
+        { status: 500 }
+      );
+    }
+
+    const searchUrl = `https://real-time-amazon-data.p.rapidapi.com/search?query=${encodeURIComponent(
+      prompt
+    )}&page=1&country=IN`;
+
+    const response = await fetch(searchUrl, {
+      method: "GET",
+      headers: {
+        "x-rapidapi-key": apiKey,
+        "x-rapidapi-host": "real-time-amazon-data.p.rapidapi.com",
+      },
+    });
+
+    const json = await response.json();
+    const items = json?.data?.products || [];
+
+    const formattedResults = items.slice(0, 16).map((item: any, index: number) => {
+      const cleanPrice = item.product_price
+        ? item.product_price.replace(/[^0-9.]/g, "")
+        : "Check Price";
+      const cleanOriginalPrice = item.product_original_price
+        ? item.product_original_price.replace(/[^0-9.]/g, "")
+        : null;
+
+      // Bulletproof Amazon Single Product URL using ASIN
+      const directProductUrl = item.asin
+        ? `https://www.amazon.in/dp/${item.asin}`
+        : item.product_url;
+
+      return {
+        id: item.asin || `live-${index}`,
+        title: item.product_title,
+        price: cleanPrice,
+        original_price: cleanOriginalPrice,
+        image_url: item.product_photo,
+        merchant: "Amazon",
+        category: prompt,
+        tag: item.is_best_seller ? "Bestseller" : item.is_prime ? "Prime" : "Deal",
+        affiliate_url: directProductUrl,
+      };
+    });
+
+    return NextResponse.json({ results: formattedResults });
+  } catch (err: any) {
+    console.error("Live Search API error:", err);
+    return NextResponse.json({ error: "Failed to fetch live products" }, { status: 500 });
   }
-
-  // 1. Database se product title fetch karein
-  const { data: product } = await supabase
-    .from("products")
-    .select("id, title, affiliate_url, clicks")
-    .eq("id", productId)
-    .single();
-
-  if (!product) {
-    return NextResponse.redirect(new URL("/", req.url));
-  }
-
-  // 2. Click count increment karein
-  await supabase
-    .from("products")
-    .update({ clicks: (product.clicks || 0) + 1 })
-    .eq("id", productId);
-
-  const rawUrl = (product.affiliate_url || "").trim();
-
-  // 3. Agar direct valid product page link hai (jisme /dp/ ya specific item path ho)
-  if (rawUrl.includes("/dp/") || rawUrl.includes("/p/")) {
-    return NextResponse.redirect(rawUrl, 302);
-  }
-
-  // 4. Guaranteed Direct Single Product Landing:
-  // Kisi bhi homepage ya broken redirect link ko bypass karke direct Amazon product search par land karwayenge
-  const safeTitle = encodeURIComponent(product.title || "product deal");
-  const directStoreUrl = `https://www.amazon.in/s?k=${safeTitle}`;
-
-  return NextResponse.redirect(directStoreUrl, 302);
 }
